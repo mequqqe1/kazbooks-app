@@ -1,6 +1,6 @@
 // src/services/openLocalEpub.ts
 import { Platform, Linking } from "react-native";
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 export async function openLocalEpub(localPath: string) {
   if (Platform.OS === "android") {

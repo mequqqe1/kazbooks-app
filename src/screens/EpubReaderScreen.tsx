@@ -1,118 +1,194 @@
-import React, { useEffect, useState } from "react";
-import { View, ActivityIndicator, StyleSheet, Alert } from "react-native";
-import { WebView } from "react-native-webview";
+import React from "react";
+import {
+  View,
+  ActivityIndicator,
+  StyleSheet,
+  TouchableOpacity,
+  Text,
+  Alert,
+  useWindowDimensions,
+} from "react-native";
 import { NativeStackScreenProps } from "@react-navigation/native-stack";
 import { RootStackParamList } from "../navigation/RootNavigator";
-import {
-  downloadEpubWithAuth,
-  isEpubDownloaded,
-  getLocalEpubPath,
-} from "../services/offlineBooks";
+import { Reader, useReader } from "@epubjs-react-native/core";
+import { useFileSystem } from "@epubjs-react-native/expo-file-system";
+import AsyncStorage from "@react-native-async-storage/async-storage";
 
 type Props = NativeStackScreenProps<RootStackParamList, "EpubReader">;
 
+const FONT_MIN = 80;
+const FONT_MAX = 160;
+const FONT_STEP = 10;
+
+const darkTheme = {
+  body: { background: "#000", color: "#fff" },
+};
+const lightTheme = {
+  body: { background: "#fff", color: "#000" },
+};
+
 const EpubReaderScreen: React.FC<Props> = ({ route, navigation }) => {
-  const { bookId, title } = route.params;
-  const [localPath, setLocalPath] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const { bookId, title, src } = route.params;
+  const { width, height } = useWindowDimensions();
 
-  useEffect(() => {
-    navigation.setOptions({ title: title || "Чтение" });
+  console.log("📘 ROUTE PARAMS:", route.params);
 
-    (async () => {
+  // 👇 useReader теперь будет работать, потому что есть ReaderProvider
+  const { changeFontSize, changeTheme, goNext, goPrevious, isLoading } =
+    useReader();
+
+  const [fontSize, setFontSize] = React.useState<number>(100);
+  const [theme, setTheme] = React.useState<"dark" | "light">("dark");
+  const [authHeaders, setAuthHeaders] = React.useState<Record<string, string>>({});
+
+  // 👇 Загрузи токен для авторизации
+  React.useEffect(() => {
+    const loadToken = async () => {
       try {
-        let path = getLocalEpubPath(bookId);
-        const has = await isEpubDownloaded(bookId);
-        if (!has) {
-          path = await downloadEpubWithAuth(bookId);
+        const token = await AsyncStorage.getItem("token");
+        if (token) {
+          setAuthHeaders({ Authorization: `Bearer ${token}` });
         }
-        setLocalPath(path);
-      } catch (e: any) {
-        console.error(e);
-        Alert.alert("Ошибка", "Не удалось открыть книгу");
-      } finally {
-        setLoading(false);
+      } catch (e) {
+        console.error("Failed to load token:", e);
       }
-    })();
-  }, [bookId]);
+    };
+    loadToken();
+  }, []);
 
-  if (loading || !localPath) {
-    return (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" />
-      </View>
-    );
-  }
+  React.useEffect(() => {
+    navigation.setOptions({ title: title || "Чтение" });
+  }, [navigation, title]);
 
-  // ВАЖНО: путь кодируем
-  const encodedPath = encodeURI(localPath);
+  // Если src пустой — грузим демо EPUB
+  const srcToUse =
+    src && src.length > 0
+      ? src
+      : "https://s3.amazonaws.com/moby-dick/OPS/package.opf";
 
-  const html = `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8" />
-  <title>EPUB Reader</title>
-  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-  <style>
-    html, body, #viewer { margin: 0; padding: 0; height: 100%; width: 100%; overflow: hidden; }
-    body { background: #111; color: #fff; }
-    #viewer { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
-  </style>
-  <script src="https://unpkg.com/epubjs/dist/epub.js"></script>
-</head>
-<body>
-  <div id="viewer"></div>
-  <script>
-    (function() {
-      const bookUrl = "${encodedPath}";
-      const book = ePub(bookUrl);
-
-      const rendition = book.renderTo("viewer", {
-        width: "100%",
-        height: "100%",
-        spread: "none"
-      });
-
-      rendition.display();
-
-      // свайпы / стрелки
-      let startX = null;
-      document.addEventListener("touchstart", function(e) {
-        startX = e.touches[0].clientX;
-      });
-
-      document.addEventListener("touchend", function(e) {
-        if (startX === null) return;
-        const dx = e.changedTouches[0].clientX - startX;
-        if (dx < -30) {
-          rendition.next();
-        } else if (dx > 30) {
-          rendition.prev();
-        }
-        startX = null;
-      });
-
-    })();
-  </script>
-</body>
-</html>
-`;
+  console.log("📚 EPUB SOURCE:", srcToUse);
 
   return (
-    <WebView
-      originWhitelist={["*"]}
-      source={{ html }}
-      style={{ flex: 1 }}
-      javaScriptEnabled
-      allowFileAccess
-      allowingReadAccessToURL={localPath}
-    />
+    <View style={styles.container}>
+      <Reader
+        src={srcToUse}
+        width={width}
+        height={height - 80}
+        fileSystem={useFileSystem}
+        defaultTheme={darkTheme}
+        // 👇 Передай заголовки авторизации для HTTP запросов
+        requestHeaders={authHeaders}
+        // 👇 Важные параметры для стабильности
+        enableSwipe={true}
+        onStarted={() => {
+          console.log("🚀 READER STARTED");
+        }}
+        onReady={() => {
+          console.log("✅ READER READY");
+        }}
+        onDisplayError={(err: any) => {
+          console.error("❌ DISPLAY ERROR:", err);
+          Alert.alert("Ошибка открытия EPUB", JSON.stringify(err, null, 2));
+        }}
+        onError={(err) => {
+          console.error("🔥 READER ERROR:", err);
+          Alert.alert("Ошибка Reader", JSON.stringify(err, null, 2));
+        }}
+        onLocationChange={(loc) => {
+          console.log("📍 Location changed:", loc?.start?.cfi);
+        }}
+        onPress={(cfi, rendition) => {
+          console.log("👆 Pressed at:", cfi);
+        }}
+        onLoadStart={() => {
+          console.log("⏳ Load started");
+        }}
+        onLoadEnd={() => {
+          console.log("✅ Load ended");
+        }}
+      />
+
+      {/* Toolbar */}
+      <View style={styles.toolbar}>
+        <TouchableOpacity onPress={goPrevious} style={styles.btn}>
+          <Text style={styles.btnText}>◀</Text>
+        </TouchableOpacity>
+        
+        <TouchableOpacity
+          onPress={() => {
+            const next = Math.max(FONT_MIN, fontSize - FONT_STEP);
+            console.log("🔤 Set font:", next);
+            setFontSize(next);
+            changeFontSize(`${next}%`);
+          }}
+          style={styles.btn}
+        >
+          <Text style={styles.btnText}>A-</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => {
+            const next = Math.min(FONT_MAX, fontSize + FONT_STEP);
+            console.log("🔤 Set font:", next);
+            setFontSize(next);
+            changeFontSize(`${next}%`);
+          }}
+          style={styles.btn}
+        >
+          <Text style={styles.btnText}>A+</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity
+          onPress={() => {
+            const next = theme === "dark" ? "light" : "dark";
+            console.log("🌗 Toggle theme:", next);
+            setTheme(next);
+            changeTheme(next === "dark" ? darkTheme : lightTheme);
+          }}
+          style={styles.btn}
+        >
+          <Text style={styles.btnText}>{theme === "dark" ? "☀" : "🌙"}</Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity onPress={goNext} style={styles.btn}>
+          <Text style={styles.btnText}>▶</Text>
+        </TouchableOpacity>
+      </View>
+
+      {isLoading && (
+        <View style={styles.loadingOverlay}>
+          <ActivityIndicator size="large" color="#fff" />
+          <Text style={{ color: "#fff", marginTop: 10 }}>Загрузка EPUB…</Text>
+        </View>
+      )}
+    </View>
   );
 };
 
 const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: "center", alignItems: "center" },
+  container: { flex: 1, backgroundColor: "#000" },
+  toolbar: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    paddingVertical: 8,
+    backgroundColor: "#111",
+    borderTopWidth: 1,
+    borderTopColor: "#222",
+    height: 60,
+  },
+  btn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+    backgroundColor: "#222",
+  },
+  btnText: { color: "#fff", fontSize: 16 },
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.8)",
+  },
 });
 
 export default EpubReaderScreen;

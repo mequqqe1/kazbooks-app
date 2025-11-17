@@ -7,7 +7,6 @@ import {
   ActivityIndicator,
   StyleSheet,
   Alert,
-  Linking,
 } from "react-native";
 import { fetchLibrary } from "../api/books";
 import { API_BASE_URL } from "../config";
@@ -61,16 +60,24 @@ const LibraryScreen: React.FC = () => {
     loadLibrary();
   }, []);
 
+  // 📖 Читать онлайн внутри ридера (по HTTP/HTTPS URL)
   const openOnline = (item: LibraryItem) => {
     if (!item.ebookUrl) {
       return Alert.alert("Нет файла EPUB");
     }
-    const url = item.ebookUrl.startsWith("http")
+
+    const src = item.ebookUrl.startsWith("http")
       ? item.ebookUrl
       : `${API_BASE_URL}${item.ebookUrl}`;
-    Linking.openURL(url);
+
+    nav.navigate("EpubReader", {
+      bookId: item.bookId,
+      title: item.title,
+      src,
+    });
   };
 
+  // 💾 Скачать/открыть оффлайн
   const onOfflinePress = async (item: LibraryItem) => {
     try {
       setDownloading(item.bookId);
@@ -81,9 +88,12 @@ const LibraryScreen: React.FC = () => {
         setOfflineMap((p) => ({ ...p, [item.bookId]: true }));
       }
 
+      const src = getLocalEpubPath(item.bookId); // file:///.../book.epub
+
       nav.navigate("EpubReader", {
         bookId: item.bookId,
         title: item.title,
+        src,
       });
     } catch (e: any) {
       Alert.alert("Ошибка", e.message ?? "Не удалось открыть книгу");
@@ -128,7 +138,7 @@ const LibraryScreen: React.FC = () => {
       <View style={{ flex: 1, justifyContent: "center" }}>
         <ActivityIndicator size="large" />
       </View>
-    ); 
+    );
 
   return (
     <FlatList<LibraryItem>

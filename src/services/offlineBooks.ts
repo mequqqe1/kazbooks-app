@@ -1,9 +1,8 @@
 // src/services/offlineBooks.ts
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { API_BASE_URL } from "../config";
 
-// жёстко берём из any, чтобы TS не ныл
 const FS_ANY = FileSystem as any;
 
 const BASE_DIR: string =

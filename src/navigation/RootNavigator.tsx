@@ -2,7 +2,7 @@ import React from "react";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
-
+import { ReaderProvider } from "@epubjs-react-native/core"; // 👈 ДОБАВЬ ЭТО
 import BooksScreen from "../screens/BooksScreen";
 import LibraryScreen from "../screens/LibraryScreen";
 import ProfileScreen from "../screens/ProfileScreen";
@@ -17,7 +17,11 @@ export type RootStackParamList = {
   Main: undefined;
   BookDetails: { bookId: string; title: string };
   CheckoutOnline: { bookId: string; title: string; minPrice: number };
-  EpubReader: { bookId: string; title: string };
+  EpubReader: {
+    bookId: string;
+    title: string;
+    src: string;
+  };
 };
 
 export type MainTabParamList = {
@@ -66,40 +70,42 @@ const RootNavigator: React.FC = () => {
   if (loading) return null;
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator>
-        {user ? (
-          <>
+    <ReaderProvider>
+      <NavigationContainer>
+        <Stack.Navigator>
+          {user ? (
+            <>
+              <Stack.Screen
+                name="Main"
+                component={MainTabs}
+                options={{ headerShown: false }}
+              />
+              <Stack.Screen
+                name="BookDetails"
+                component={BookDetailsScreen}
+                options={{ title: "Книга" }}
+              />
+              <Stack.Screen
+                name="CheckoutOnline"
+                component={CheckoutOnlineScreen}
+                options={{ title: "Покупка" }}
+              />
+              <Stack.Screen
+                name="EpubReader"
+                component={EpubReaderScreen}
+                options={{ title: "Чтение" }}
+              />
+            </>
+          ) : (
             <Stack.Screen
-              name="Main"
-              component={MainTabs}
+              name="Auth"
+              component={AuthNavigator}
               options={{ headerShown: false }}
             />
-            <Stack.Screen
-              name="BookDetails"
-              component={BookDetailsScreen}
-              options={{ title: "Книга" }}
-            />
-            <Stack.Screen
-              name="CheckoutOnline"
-              component={CheckoutOnlineScreen}
-              options={{ title: "Покупка" }}
-            />
-            <Stack.Screen
-              name="EpubReader"
-              component={EpubReaderScreen}
-              options={{ title: "Чтение" }}
-            />
-          </>
-        ) : (
-          <Stack.Screen
-            name="Auth"
-            component={AuthNavigator}
-            options={{ headerShown: false }}
-          />
-        )}
-      </Stack.Navigator>
-    </NavigationContainer>
+          )}
+        </Stack.Navigator>
+      </NavigationContainer>
+    </ReaderProvider>
   );
 };
 
